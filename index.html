@@ -30,16 +30,17 @@
 <h1>Rank Our Upcoming Flavors</h1>
 
 <div class="widget" id="voteWidget">
-  <ul id="rankList" class="draggable-list">
-    <li class="draggable-item" draggable="true">Orange Saffron Water <span>☰</span></li>
-    <li class="draggable-item" draggable="true">Dragonfruit Basil Water <span>☰</span></li>
-    <li class="draggable-item" draggable="true">Pear Elderflower Water <span>☰</span></li>
-    <li class="draggable-item" draggable="true">Pineapple Ginger Water <span>☰</span></li>
-    <li class="draggable-item" draggable="true">Lavender Mint Water <span>☰</span></li>
-    <li class="draggable-item" draggable="true">Watermelon Sage Water <span>☰</span></li>
-  </ul>
-
-  <button id="submitVote" class="submit-btn">Submit Vote</button>
+  <div id="votingSection">
+    <ul id="rankList" class="draggable-list">
+      <li class="draggable-item" draggable="true">Orange Saffron Water <span>☰</span></li>
+      <li class="draggable-item" draggable="true">Dragonfruit Basil Water <span>☰</span></li>
+      <li class="draggable-item" draggable="true">Pear Elderflower Water <span>☰</span></li>
+      <li class="draggable-item" draggable="true">Pineapple Ginger Water <span>☰</span></li>
+      <li class="draggable-item" draggable="true">Lavender Mint Water <span>☰</span></li>
+      <li class="draggable-item" draggable="true">Watermelon Sage Water <span>☰</span></li>
+    </ul>
+    <button id="submitVote" class="submit-btn">Submit Vote</button>
+  </div>
 
   <div id="successMsg" class="msg success">Thank you — your vote was recorded.</div>
   <div id="errorMsg" class="msg error"></div>
@@ -54,12 +55,23 @@
 
 <script>
 (function(){
-  // ================ ⚠️ UPDATED URL ⚠️ =================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxcrqy0YMgPv2gTvkpBciOPWfxeSjI0GgI8Ntpo7dEhramun4zXZAURbHyQGBRwoW_hjQ/exec";
+  // ================ ⚠️ YOUR WORKING URL ⚠️ =================
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzrEAQLCSk8UTD-b1gu4zFYvgXb-WXDoSGQIvbar8J0wFo44eQGdimxdJ9EVosoM_vyMQ/exec";
   // ========================================================
 
+  const STORAGE_KEY = 'flavor_vote_submitted_v1';
   const listEl = document.getElementById('rankList');
+  const votingSection = document.getElementById('votingSection');
+  const successMsg = document.getElementById('successMsg');
   let dragItem = null;
+
+  // 1. CHECK IF ALREADY VOTED ON LOAD
+  if (localStorage.getItem(STORAGE_KEY) === 'true') {
+    votingSection.style.display = 'none'; // Hide form
+    successMsg.textContent = "You have already voted. Here are the live results:";
+    successMsg.style.display = 'block';
+    fetchStatsAndRender(); // Just show stats
+  }
 
   // Drag and Drop Logic
   listEl.addEventListener('dragstart', e => { dragItem = e.target; e.target.style.opacity = '0.5'; });
@@ -87,7 +99,6 @@
     };
   }
 
-  // Fallback: Standard Form POST to hidden iframe
   function postAsFormFallback(url, data){
     const form = document.createElement('form');
     form.method = 'POST';
@@ -139,10 +150,20 @@
     } catch(e){ console.warn("Could not load stats", e); }
   }
 
+  // Helper to Lock Voting
+  function lockVotingUI() {
+    localStorage.setItem(STORAGE_KEY, 'true'); // Save receipt
+    votingSection.style.display = 'none'; // Hide form
+    successMsg.style.display = 'block';
+    successMsg.textContent = "Thank you — your vote was recorded.";
+  }
+
   async function submitVote(){
     const btn = document.getElementById('submitVote');
-    const successMsg = document.getElementById('successMsg');
     const errorMsg = document.getElementById('errorMsg');
+
+    // Double check just in case
+    if (localStorage.getItem(STORAGE_KEY) === 'true') return;
 
     successMsg.style.display = 'none';
     errorMsg.style.display = 'none';
@@ -153,7 +174,7 @@
     const payload = buildPayload();
 
     try {
-      // METHOD 1: Fetch with Text Body (Parsed as JSON by Script)
+      // METHOD 1: Fetch with Text Body
       const r = await fetch(SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify(payload)
@@ -164,32 +185,39 @@
       try { data = JSON.parse(txt); } catch(e){}
 
       if (data.status === "success") {
-        successMsg.style.display = 'block';
+        lockVotingUI(); // <--- Locks user out
         await fetchStatsAndRender();
       } else {
-        // If script returned an error, show it
         throw new Error(data.message || "Submission error");
       }
       
     } catch(err){
       console.warn("Fetch failed, trying fallback...", err);
-      // METHOD 2: Fallback to hidden iframe (Always works, but no error feedback)
+      // METHOD 2: Fallback
       postAsFormFallback(SCRIPT_URL, payload);
       
-      // Assume success for UI purposes after short delay
       setTimeout(() => {
-        successMsg.style.display = 'block';
+        lockVotingUI(); // <--- Locks user out
         successMsg.textContent = "Vote submitted (fallback mode).";
         fetchStatsAndRender();
       }, 1500);
     } finally {
-      btn.disabled = false;
-      btn.textContent = "Submit Vote";
+      btn.disabled = false; // Only re-enables if it failed and didn't lock
+      if (localStorage.getItem(STORAGE_KEY) !== 'true') {
+         btn.textContent = "Submit Vote";
+      }
     }
   }
 
   document.getElementById('submitVote').addEventListener('click', submitVote);
-  fetchStatsAndRender();
+  
+  // If they haven't voted, load stats anyway so they can see current trends (optional)
+  // or just wait until they vote. Let's load them now:
+  if (localStorage.getItem(STORAGE_KEY) !== 'true') {
+     // Optional: load stats before voting? Usually better to hide stats until vote.
+     // Uncomment next line if you want stats visible BEFORE voting:
+     // fetchStatsAndRender(); 
+  }
 })();
 </script>
 

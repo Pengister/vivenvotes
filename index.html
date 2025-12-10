@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Vote Widget — Flavors</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;max-width:880px;margin:24px auto;padding:0 16px;color:#222}
+  h1{text-align:center;margin-bottom:10px}
+  .widget{background:#fff;padding:18px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+  ul.draggable-list{list-style:none;padding:0;margin:0}
+  li.draggable-item{padding:12px 14px;margin:8px 0;background:#fafafa;border-radius:8px;border:1px solid #e6e6e6;display:flex;justify-content:space-between;align-items:center;cursor:grab}
+  .submit-btn{display:block;width:100%;padding:12px;border-radius:8px;border:0;background:#00a86b;color:#fff;font-weight:600;margin-top:12px;cursor:pointer}
+  .msg{margin-top:12px;text-align:center;font-weight:600}
+  .msg.success{color:#0a8b3a;display:none}
+  .msg.error{color:#b00020;display:none}
+  .chart-wrap{margin-top:20px}
+  .chart-title{font-weight:700;margin-bottom:8px}
+  .bars{display:flex;flex-direction:column;gap:10px}
+  .bar-row{display:flex;align-items:center;gap:12px}
+  .bar-label{width:200px;flex:0 0 200px}
+  .bar-visual{flex:1;background:#f2f6f4;padding:6px;border-radius:8px;position:relative;height:28px}
+  .bar-fill{height:100%;border-radius:6px;background:#06a76a;width:0%;transition:width 600ms ease}
+  .bar-percent{width:56px;text-align:right;font-weight:700}
+  @media(max-width:600px){ .bar-label{width:120px} .bar-percent{width:44px} }
+</style>
+</head>
+<body>
+<h1>Rank Our Upcoming Flavors</h1>
+
+<div class="widget" id="voteWidget">
+  <ul id="rankList" class="draggable-list">
+    <li class="draggable-item" draggable="true">Orange Saffron Water <span>☰</span></li>
+    <li class="draggable-item" draggable="true">Dragonfruit Basil Water <span>☰</span></li>
+    <li class="draggable-item" draggable="true">Pear Elderflower Water <span>☰</span></li>
+    <li class="draggable-item" draggable="true">Pineapple Ginger Water <span>☰</span></li>
+    <li class="draggable-item" draggable="true">Lavender Mint Water <span>☰</span></li>
+    <li class="draggable-item" draggable="true">Watermelon Sage Water <span>☰</span></li>
+  </ul>
+
+  <button id="submitVote" class="submit-btn">Submit Vote</button>
+
+  <div id="successMsg" class="msg success">Thank you — your vote was recorded.</div>
+  <div id="errorMsg" class="msg error"></div>
+
+  <div class="chart-wrap" id="chartWrap" style="display:none">
+    <div class="chart-title">Live Results — % of 1st-Place Votes</div>
+    <div class="bars" id="bars"></div>
+  </div>
+</div>
+
+<iframe name="hidden_iframe_for_votes" style="display:none"></iframe>
+
+<script>
+(function(){
+  // ================ NEW SCRIPT URL INSERTED =================
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6PsKJDw3n0CP_p7_LnVag_-Xa3nYlKRNqqhOFWkRpZzfhS57tOEcJWMSRWlCe_NPifQ/exec";
+  // ===========================================================
+
+  const listEl = document.getElementById('rankList');
+  let dragItem = null;
+
+  listEl.addEventListener('dragstart', e => { dragItem = e.target; e.target.style.opacity = '0.5'; });
+  listEl.addEventListener('dragend', e => { e.target.style.opacity = ''; });
+  listEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    const target = e.target.closest('.draggable-item');
+    if (target && target !== dragItem) {
+      const rect = target.getBoundingClientRect();
+      const next = (e.clientY - rect.top) / rect.height > 0.5;
+      listEl.insertBefore(dragItem, next ? target.nextSibling : target);
+    }
+  });
+
+  function buildPayload(){
+    const items = document.querySelectorAll('.draggable-item');
+    const ranks = Array.from(items).map(i => i.innerText.replace('☰','').trim());
+    return {
+      rank_1: ranks[0] || '',
+      rank_2: ranks[1] || '',
+      rank_3: ranks[2] || '',
+      rank_4: ranks[3] || '',
+      rank_5: ranks[4] || '',
+      rank_6: ranks[5] || ''
+    };
+  }
+
+  function postAsFormFallback(url, data){
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = 'hidden_iframe_for_votes';
+    form.style.display = 'none';
+    Object.keys(data).forEach(k => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = k;
+      input.value = data[k];
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(()=>form.remove(),1500);
+  }
+
+  function renderChart(percentages, counts){
+    const chartWrap = document.getElementById('chartWrap');
+    const bars = document.getElementById('bars');
+    bars.innerHTML = '';
+
+    const flavors = [
+      "Orange Saffron Water",
+      "Dragonfruit Basil Water",
+      "Pear Elderflower Water",
+      "Pineapple Ginger Water",
+      "Lavender Mint Water",
+      "Watermelon Sage Water"
+    ];
+
+    flavors.forEach(name => {
+      const pct = percentages[name] || 0;
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML =
+        `<div class="bar-label">${name}</div>
+         <div class="bar-visual"><div class="bar-fill" style="width:${pct}%"></div></div>
+         <div class="bar-percent">${pct}%</div>`;
+      bars.appendChild(row);
+    });
+
+    chartWrap.style.display = 'block';
+  }
+
+  async function fetchStatsAndRender(){
+    try {
+      const r = await fetch(SCRIPT_URL, { method: 'GET' });
+      const json = await r.json();
+      if (json && json.status === 'success') {
+        renderChart(json.percentages || {}, json.counts || {});
+      }
+    } catch(e){ console.warn("Could not load stats", e); }
+  }
+
+  async function submitVote(){
+    const btn = document.getElementById('submitVote');
+    const successMsg = document.getElementById('successMsg');
+    const errorMsg = document.getElementById('errorMsg');
+
+    successMsg.style.display = 'none';
+    errorMsg.style.display = 'none';
+    errorMsg.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    const payload = buildPayload();
+
+    try {
+      const fd = new FormData();
+      Object.keys(payload).forEach(k => fd.append(k, payload[k]));
+
+      const r = await fetch(SCRIPT_URL, { method:'POST', body: fd });
+      const txt = await r.text();
+      let data = {};
+      try { data = JSON.parse(txt); } catch(e){}
+
+      if (data.status === "success") {
+        successMsg.style.display = 'block';
+        await fetchStatsAndRender();
+      } else {
+        errorMsg.textContent = data.message || "Submission failed";
+        errorMsg.style.display = 'block';
+        postAsFormFallback(SCRIPT_URL, payload);
+        setTimeout(fetchStatsAndRender, 1200);
+      }
+    } catch(err){
+      errorMsg.textContent = "Network error — using fallback.";
+      errorMsg.style.display = 'block';
+      postAsFormFallback(SCRIPT_URL, payload);
+      setTimeout(fetchStatsAndRender, 1200);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Submit Vote";
+    }
+  }
+
+  document.getElementById('submitVote').addEventListener('click', submitVote);
+
+  fetchStatsAndRender();
+})();
+</script>
+
+</body>
+</html>

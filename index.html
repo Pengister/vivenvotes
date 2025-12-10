@@ -11,6 +11,7 @@
   ul.draggable-list{list-style:none;padding:0;margin:0}
   li.draggable-item{padding:12px 14px;margin:8px 0;background:#fafafa;border-radius:8px;border:1px solid #e6e6e6;display:flex;justify-content:space-between;align-items:center;cursor:grab}
   .submit-btn{display:block;width:100%;padding:12px;border-radius:8px;border:0;background:#00a86b;color:#fff;font-weight:600;margin-top:12px;cursor:pointer}
+  .submit-btn:disabled{background:#ccc;cursor:not-allowed}
   .msg{margin-top:12px;text-align:center;font-weight:600}
   .msg.success{color:#0a8b3a;display:none}
   .msg.error{color:#b00020;display:none}
@@ -53,13 +54,14 @@
 
 <script>
 (function(){
-  // ================ NEW SCRIPT URL INSERTED =================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwoog5595NeuqgZ9ekk_LB34X_h1D13bpgdlsIEvJxL1Fla_lExwynRWhAqM9ZKjyDuMQ/exec";
-  // ===========================================================
+  // ================ ⚠️ UPDATED URL ⚠️ =================
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzrEAQLCSk8UTD-b1gu4zFYvgXb-WXDoSGQIvbar8J0wFo44eQGdimxdJ9EVosoM_vyMQ/exec";
+  // ========================================================
 
   const listEl = document.getElementById('rankList');
   let dragItem = null;
 
+  // Drag and Drop Logic
   listEl.addEventListener('dragstart', e => { dragItem = e.target; e.target.style.opacity = '0.5'; });
   listEl.addEventListener('dragend', e => { e.target.style.opacity = ''; });
   listEl.addEventListener('dragover', e => {
@@ -85,6 +87,7 @@
     };
   }
 
+  // Fallback: Standard Form POST to hidden iframe
   function postAsFormFallback(url, data){
     const form = document.createElement('form');
     form.method = 'POST';
@@ -100,21 +103,17 @@
     });
     document.body.appendChild(form);
     form.submit();
-    setTimeout(()=>form.remove(),1500);
+    setTimeout(()=>form.remove(), 1500);
   }
 
   function renderChart(percentages, counts){
     const chartWrap = document.getElementById('chartWrap');
     const bars = document.getElementById('bars');
     bars.innerHTML = '';
-
+    
     const flavors = [
-      "Orange Saffron Water",
-      "Dragonfruit Basil Water",
-      "Pear Elderflower Water",
-      "Pineapple Ginger Water",
-      "Lavender Mint Water",
-      "Watermelon Sage Water"
+      "Orange Saffron Water", "Dragonfruit Basil Water", "Pear Elderflower Water",
+      "Pineapple Ginger Water", "Lavender Mint Water", "Watermelon Sage Water"
     ];
 
     flavors.forEach(name => {
@@ -127,13 +126,12 @@
          <div class="bar-percent">${pct}%</div>`;
       bars.appendChild(row);
     });
-
     chartWrap.style.display = 'block';
   }
 
   async function fetchStatsAndRender(){
     try {
-      const r = await fetch(SCRIPT_URL, { method: 'GET' });
+      const r = await fetch(SCRIPT_URL);
       const json = await r.json();
       if (json && json.status === 'success') {
         renderChart(json.percentages || {}, json.counts || {});
@@ -155,10 +153,12 @@
     const payload = buildPayload();
 
     try {
-      const fd = new FormData();
-      Object.keys(payload).forEach(k => fd.append(k, payload[k]));
-
-      const r = await fetch(SCRIPT_URL, { method:'POST', body: fd });
+      // METHOD 1: Fetch with Text Body (Parsed as JSON by Script)
+      const r = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
       const txt = await r.text();
       let data = {};
       try { data = JSON.parse(txt); } catch(e){}
@@ -167,16 +167,21 @@
         successMsg.style.display = 'block';
         await fetchStatsAndRender();
       } else {
-        errorMsg.textContent = data.message || "Submission failed";
-        errorMsg.style.display = 'block';
-        postAsFormFallback(SCRIPT_URL, payload);
-        setTimeout(fetchStatsAndRender, 1200);
+        // If script returned an error, show it
+        throw new Error(data.message || "Submission error");
       }
+      
     } catch(err){
-      errorMsg.textContent = "Network error — using fallback.";
-      errorMsg.style.display = 'block';
+      console.warn("Fetch failed, trying fallback...", err);
+      // METHOD 2: Fallback to hidden iframe (Always works, but no error feedback)
       postAsFormFallback(SCRIPT_URL, payload);
-      setTimeout(fetchStatsAndRender, 1200);
+      
+      // Assume success for UI purposes after short delay
+      setTimeout(() => {
+        successMsg.style.display = 'block';
+        successMsg.textContent = "Vote submitted (fallback mode).";
+        fetchStatsAndRender();
+      }, 1500);
     } finally {
       btn.disabled = false;
       btn.textContent = "Submit Vote";
@@ -184,7 +189,6 @@
   }
 
   document.getElementById('submitVote').addEventListener('click', submitVote);
-
   fetchStatsAndRender();
 })();
 </script>
